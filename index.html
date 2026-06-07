@@ -30,6 +30,7 @@
             background: var(--panel-color); padding: 40px; border-radius: 8px;
             border: 1px solid var(--window-border); text-align: center; width: 350px;
             box-shadow: 0 0 25px rgba(0,255,204,0.15);
+            z-index: 10002; transition: all 0.5s ease;
         }
         .login-box h2 { color: var(--accent-color); margin-bottom: 5px; letter-spacing: 2px; }
         .login-box select, .login-box input {
@@ -46,12 +47,35 @@
         .btn-warn { border-color: var(--warn-color); color: var(--warn-color); }
         .btn-warn:hover { background: var(--warn-color); color: #000; }
 
+        /* 로그인 사원증 연출 스캔라인 및 카드 스타일 추가 */
         .scan-line {
-            width: 100%; height: 2px; background: var(--accent-color);
+            width: 100%; height: 4px; background: var(--accent-color);
             position: absolute; left: 0; top: 0; display: none;
-            box-shadow: 0 0 10px var(--accent-color); animation: scan 1.2s linear infinite;
+            box-shadow: 0 0 15px var(--accent-color); animation: scan 1.5s linear infinite;
+            z-index: 10005;
         }
         @keyframes scan { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+
+        /* 신규: 가상 사원증 홀로그램 오버레이 효과 */
+        #hologram-id-card {
+            position: absolute; width: 280px; height: 420px;
+            background: linear-gradient(135deg, #1e2633, #0d1117);
+            border: 2px solid var(--accent-color); border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.4);
+            display: none; flex-direction: column; align-items: center; justify-content: space-between;
+            padding: 25px; box-sizing: border-box; text-align: center;
+            z-index: 10003; opacity: 0; transition: opacity 0.4s ease;
+        }
+        .card-photo-frame {
+            width: 110px; height: 140px; background: #11151d;
+            border: 1px solid var(--window-border); border-radius: 6px;
+            display: flex; align-items: center; justify-content: center; font-size: 45px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8); margin-top: 15px;
+        }
+        .card-barcode {
+            width: 100%; height: 35px; background: repeating-linear-gradient(90deg, #fff, #fff 2px, #000 2px, #000 6px);
+            opacity: 0.7; margin-bottom: 10px;
+        }
 
         /* 2. 가상 바탕화면 프레임 */
         #desktop {
@@ -162,7 +186,19 @@
 
     <div id="login-overlay">
         <div class="scan-line" id="scanner"></div>
-        <div class="login-box">
+        
+        <div id="hologram-id-card">
+            <div style="font-size: 11px; color: var(--accent-color); font-weight: bold; letter-spacing: 3px;">BK-MAAK ID CARD</div>
+            <div class="card-photo-frame">👤</div>
+            <div style="margin: 15px 0;">
+                <div id="card-u-name" style="font-size: 18px; font-weight: bold; color: #fff; margin-bottom: 5px;">연구원</div>
+                <div id="card-u-role" style="font-size: 11px; color: var(--accent-color); letter-spacing: 1px;">RESEARCHER</div>
+            </div>
+            <div class="card-barcode"></div>
+            <div style="font-size: 9px; color: #555;">SECURITY LEVEL 4 SYSTEM ACCESS</div>
+        </div>
+
+        <div class="login-box" id="login-form-box">
             <h2>백관막 터미널 가동</h2>
             <div style="font-size: 11px; color: #8b949e; margin-bottom: 15px;">신분 증명 자격 검증 프로세스</div>
             <input type="text" id="login-name" placeholder="연구원 이름 입력" value="">
@@ -345,8 +381,7 @@
     </div>
 
     <script>
-        // 🌟 무료 전역 데이터 공유 엔드포인트 세팅 (JSONBin 무료 오픈형 엔드포인트)
-        // 만약 완전 비밀 데이터 공간이 필요하면 아래 BIN_ID의 영문 숫자를 무작위로 다른걸로 바꿔주시면 독립된 새 공간이 열립니다.
+        // 🌟 [중요] 1단계에서 발급받은 본인만의 JSONBin 고유 ID를 아래 따옴표 안에 넣어주세요!
         const BIN_ID = "6612ab73e41b4d34e4bf7e99"; 
         const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
@@ -379,7 +414,6 @@
                 syncUI();
             } catch (err) {
                 document.getElementById('sync-status').innerText = "🔴 클라우드 로드 실패 (초기화 필요)";
-                // 서버가 비어있을 때 임시로 로컬 스토리지 데이터 백업본 로드
                 subjectsDB = JSON.parse(localStorage.getItem('bk_subjects')) || [];
                 relationsDB = JSON.parse(localStorage.getItem('bk_relations')) || {};
                 experimentLogsDB = JSON.parse(localStorage.getItem('bk_logs')) || [];
@@ -398,7 +432,6 @@
                     nodePositions: nodePositions
                 };
                 
-                // 로컬 백업도 병행
                 localStorage.setItem('bk_subjects', JSON.stringify(subjectsDB));
                 localStorage.setItem('bk_relations', JSON.stringify(relationsDB));
                 localStorage.setItem('bk_logs', JSON.stringify(experimentLogsDB));
@@ -417,15 +450,35 @@
             }
         }
 
+        // 사원증 연출 효과가 적용된 신규 로그인 프로세스
         function processTerminalSecurityLogin() {
             const scanner = document.getElementById('scanner');
-            const name = document.getElementById('login-name').value || "연구원";
+            const loginFormBox = document.getElementById('login-form-box');
+            const holoCard = document.getElementById('hologram-id-card');
+            
+            const name = document.getElementById('login-name').value.trim() || "무명";
             currentAuthority = document.getElementById('login-role').value;
-            scanner.style.display = 'block';
+            
+            // 사원증 데이터 세팅
+            document.getElementById('card-u-name').innerText = name;
+            document.getElementById('card-u-role').innerText = currentAuthority === 'admin' ? "MASTER ADMIN" : "RESEARCH VIEWER";
 
+            // 1단계: 기존 입력창이 사라지고 사원증이 중앙에 나타나며 레이저 스캔 가동
+            loginFormBox.style.opacity = '0';
+            setTimeout(() => {
+                loginFormBox.style.display = 'none';
+                holoCard.style.display = 'flex';
+                setTimeout(() => {
+                    holoCard.style.opacity = '1';
+                    scanner.style.display = 'block';
+                }, 50);
+            }, 400);
+
+            // 2단계: 2초 동안 사원증을 스캔한 후 메인 가상 데스크톱 화면 진입
             setTimeout(() => {
                 scanner.style.display = 'none';
                 document.getElementById('login-overlay').style.opacity = '0';
+                
                 setTimeout(() => {
                     document.getElementById('login-overlay').style.display = 'none';
                     document.getElementById('u-name').innerText = name + " 연구원";
@@ -438,14 +491,11 @@
                     document.getElementById('det-admin-belt').style.display = isAdmin ? 'flex' : 'none';
                     document.getElementById('log-admin-belt').style.display = isAdmin ? 'flex' : 'none';
 
-                    // 로그인 완료 후 최초 데이터 로딩
                     loadCloudData();
-                    // 7초마다 서버에서 다른 유저가 등록한 최신 정보 실시간 백그라운드 확인
                     setInterval(loadCloudData, 7000);
-
                     observeResize();
                 }, 400);
-            }, 800);
+            }, 2600);
         }
 
         function openWindow(id) {
@@ -536,14 +586,11 @@
             subjectsDB.splice(activeProfileDetailIndex, 1); saveCloudData(); closeWindow('win-profile-detail');
         }
 
+        // 문법 오류가 있던 BIN_ID / API_URL 중복 정의를 전면 수정 및 삭제 완료
         function buildRelations() {
             const container = document.getElementById('relation-canvas-container');
             document.querySelectorAll('.node-subject').forEach(n => n.remove());
             if(subjectsDB.length === 0) return;
-            // 🌟 [중요] 1단계에서 획득한 나만의 고유 BIN_ID를 아래 따옴표 안에 붙여넣으세요!
-            // 기존 코드: const BIN_ID = "여기에_복사한_ID를_넣으세요";
-            const BIN_ID = "6a258515f5f4af5e29c69c42"; 
-            const API_URL = `https://api.jsonbin.io/v3/b/${6a258515f5f4af5e29c69c42}`;
 
             const cx = container.clientWidth / 2 - 30, cy = container.clientHeight / 2 - 30, r = Math.min(cx, cy) - 50;
             subjectsDB.forEach((s, idx) => {
@@ -559,7 +606,6 @@
                 const l = document.createElement('div'); l.className = 'node-label'; l.innerText = s.name;
                 n.appendChild(l); n.addEventListener('click', () => highlightNode(s.name, idx));
                 
-                // 드래그 로직 (드래그가 끝나 마우스를 뗄 때 위치 정보를 전체 유저에게 동기화)
                 n.onmousedown = function(e) {
                     let sx = e.clientX - n.getBoundingClientRect().left, sy = e.clientY - n.getBoundingClientRect().top;
                     function move(ev) {
@@ -571,7 +617,7 @@
                     document.addEventListener('mousemove', move);
                     document.addEventListener('mouseup', () => {
                         document.removeEventListener('mousemove', move);
-                        saveCloudData(); // 배치 후 동기화
+                        saveCloudData();
                     }, {once:true});
                 };
                 container.appendChild(n);
