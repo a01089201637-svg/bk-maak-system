@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>연구기관 백관막 - 가상 데스크톱 시스템 v10.0</title>
+    <title>연구기관 백관막 - 가상 데스크톱 시스템 v11.0</title>
     <style>
         :root {
             --bg-color: #0b0d10;
@@ -70,7 +70,7 @@
         #system-bar .logo { color: var(--accent-color); font-weight: bold; font-size: 14px; margin-right: 30px; letter-spacing: 1px; }
         #system-bar .menu-btn { background: none; border: none; color: #8b949e; margin-right: 20px; cursor: pointer; font-size: 13px; }
         #system-bar .menu-btn:hover { color: white; }
-        #sync-status { font-size: 11px; color: var(--accent-color); margin-left: auto; }
+        #sync-status { font-size: 11px; color: #8b949e; margin-left: auto; }
 
         /* 아이콘 서식 */
         .sys-icon { width: 95px; text-align: center; cursor: pointer; z-index: 5; }
@@ -142,7 +142,7 @@
         }
         .relation-side-inspector {
             width: 220px; background: #161b22; border: 1px solid var(--window-border);
-            border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shrink: 0; box-sizing: border-box;
+            border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; box-sizing: border-box;
         }
 
         .log-item-row {
@@ -168,16 +168,16 @@
             <input type="text" id="login-name" placeholder="연구원 이름 입력" value="">
             <select id="login-role">
                 <option value="admin">관리자 연구원 : 마스터 에디터</option>
-                <option value="viewer">일반 열람 연구원 : 기록 열람</option>
+                <option value="viewer">일반 열람 연구원 : 조회 및 열람</option>
             </select>
             <button class="btn" onclick="processTerminalSecurityLogin()">사원증 등록 및 시스템 가동</button>
         </div>
     </div>
 
     <div id="system-bar">
-        <div class="logo">🔒 BK-MAAK CORE SYSTEM v10.0</div>
+        <div class="logo">🔒 BK-MAAK CORE SYSTEM v11.0</div>
         <button class="menu-btn" onclick="openWindow('win-purpose')">📂 기관 목적령 확인</button>
-        <div id="sync-status">🟢 시스템 정상 가동 중</div>
+        <div id="sync-status">⏳ 클라우드 동기화 준비 중...</div>
     </div>
 
     <div id="desktop">
@@ -242,7 +242,7 @@
             </div>
             <div class="form-row" style="margin-top: 10px;">
                 <div class="form-group"><label>최종 투약 케미컬</label><input type="text" id="reg-drugs"></div>
-                <div class="form-group"><label>격리실 특이사항</label><input type="text" id="reg-etc"></div>
+                <div class="form-group"><label>특이사항</label><input type="text" id="reg-etc"></div>
             </div>
             <button class="btn" style="margin-top: 10px;" id="reg-submit-btn" onclick="commitSubjectData()">레코드 저장</button>
         </div>
@@ -345,22 +345,76 @@
     </div>
 
     <script>
-        // LocalStorage 연동 데이터 세팅
-        let subjectsDB = JSON.parse(localStorage.getItem('bk_subjects')) || [];
-        let relationsDB = JSON.parse(localStorage.getItem('bk_relations')) || {};
-        let experimentLogsDB = JSON.parse(localStorage.getItem('bk_logs')) || [];
+        // 🌟 무료 전역 데이터 공유 엔드포인트 세팅 (JSONBin 무료 오픈형 엔드포인트)
+        // 만약 완전 비밀 데이터 공간이 필요하면 아래 BIN_ID의 영문 숫자를 무작위로 다른걸로 바꿔주시면 독립된 새 공간이 열립니다.
+        const BIN_ID = "6612ab73e41b4d34e4bf7e99"; 
+        const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+        let subjectsDB = [];
+        let relationsDB = {};
+        let experimentLogsDB = [];
+        let nodePositions = {};
         
         let currentAuthority = "viewer";
         let activeRelationNodeName = null;
         let activeProfileDetailIndex = null;
         let activeLogDetailIndex = null; 
-        let nodePositions = {};
 
-        function saveData() {
-            localStorage.setItem('bk_subjects', JSON.stringify(subjectsDB));
-            localStorage.setItem('bk_relations', JSON.stringify(relationsDB));
-            localStorage.setItem('bk_logs', JSON.stringify(experimentLogsDB));
-            syncUI();
+        // 클라우드 서버에서 통합 데이터 로드하기
+        async function loadCloudData() {
+            try {
+                document.getElementById('sync-status').innerText = "⏳ 클라우드 동기화 중...";
+                const res = await fetch(`${API_URL}/latest`, {
+                    headers: { "X-Bin-Meta": "false" }
+                });
+                if (!res.ok) throw new Error();
+                const cloudData = await res.json();
+                
+                subjectsDB = cloudData.subjects || [];
+                relationsDB = cloudData.relations || {};
+                experimentLogsDB = cloudData.logs || [];
+                nodePositions = cloudData.nodePositions || {};
+                
+                document.getElementById('sync-status').innerText = "🟢 실시간 동기화 완료";
+                syncUI();
+            } catch (err) {
+                document.getElementById('sync-status').innerText = "🔴 클라우드 로드 실패 (초기화 필요)";
+                // 서버가 비어있을 때 임시로 로컬 스토리지 데이터 백업본 로드
+                subjectsDB = JSON.parse(localStorage.getItem('bk_subjects')) || [];
+                relationsDB = JSON.parse(localStorage.getItem('bk_relations')) || {};
+                experimentLogsDB = JSON.parse(localStorage.getItem('bk_logs')) || [];
+                syncUI();
+            }
+        }
+
+        // 클라우드 서버에 데이터 업데이트 및 실시간 전송
+        async function saveCloudData() {
+            try {
+                document.getElementById('sync-status').innerText = "⏳ 데이터 서버 전송 중...";
+                const payload = {
+                    subjects: subjectsDB,
+                    relations: relationsDB,
+                    logs: experimentLogsDB,
+                    nodePositions: nodePositions
+                };
+                
+                // 로컬 백업도 병행
+                localStorage.setItem('bk_subjects', JSON.stringify(subjectsDB));
+                localStorage.setItem('bk_relations', JSON.stringify(relationsDB));
+                localStorage.setItem('bk_logs', JSON.stringify(experimentLogsDB));
+
+                const res = await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error();
+                document.getElementById('sync-status').innerText = "🟢 클라우드 저장 완료";
+                syncUI();
+            } catch (err) {
+                document.getElementById('sync-status').innerText = "🔴 서버 저장 실패 (로컬 우선 저장)";
+                syncUI();
+            }
         }
 
         function processTerminalSecurityLogin() {
@@ -384,7 +438,11 @@
                     document.getElementById('det-admin-belt').style.display = isAdmin ? 'flex' : 'none';
                     document.getElementById('log-admin-belt').style.display = isAdmin ? 'flex' : 'none';
 
-                    syncUI();
+                    // 로그인 완료 후 최초 데이터 로딩
+                    loadCloudData();
+                    // 7초마다 서버에서 다른 유저가 등록한 최신 정보 실시간 백그라운드 확인
+                    setInterval(loadCloudData, 7000);
+
                     observeResize();
                 }, 400);
             }, 800);
@@ -451,7 +509,7 @@
                 subjectsDB[parseInt(idxStr)] = data; document.getElementById('reg-edit-index').value = "";
             } else { subjectsDB.push(data); }
 
-            saveData(); closeWindow('win-register');
+            saveCloudData(); closeWindow('win-register');
             document.getElementById('reg-name').value = ''; document.getElementById('reg-photo-url').value = '';
             document.getElementById('register-window-title').innerText = "🧬 CORE_REG.sys";
             document.getElementById('reg-submit-btn').innerText = "레코드 저장";
@@ -475,7 +533,7 @@
             if(!confirm('영구 삭제하시겠습니까?')) return;
             const name = subjectsDB[activeProfileDetailIndex].name;
             delete relationsDB[name]; Object.keys(relationsDB).forEach(k => { if(relationsDB[k][name]) delete relationsDB[k][name]; });
-            subjectsDB.splice(activeProfileDetailIndex, 1); saveData(); closeWindow('win-profile-detail');
+            subjectsDB.splice(activeProfileDetailIndex, 1); saveCloudData(); closeWindow('win-profile-detail');
         }
 
         function buildRelations() {
@@ -497,7 +555,7 @@
                 const l = document.createElement('div'); l.className = 'node-label'; l.innerText = s.name;
                 n.appendChild(l); n.addEventListener('click', () => highlightNode(s.name, idx));
                 
-                // 드래그 로직
+                // 드래그 로직 (드래그가 끝나 마우스를 뗄 때 위치 정보를 전체 유저에게 동기화)
                 n.onmousedown = function(e) {
                     let sx = e.clientX - n.getBoundingClientRect().left, sy = e.clientY - n.getBoundingClientRect().top;
                     function move(ev) {
@@ -507,7 +565,10 @@
                         nodePositions[s.name] = { x: nx, y: ny }; drawLines();
                     }
                     document.addEventListener('mousemove', move);
-                    document.addEventListener('mouseup', () => document.removeEventListener('mousemove', move), {once:true});
+                    document.addEventListener('mouseup', () => {
+                        document.removeEventListener('mousemove', move);
+                        saveCloudData(); // 배치 후 동기화
+                    }, {once:true});
                 };
                 container.appendChild(n);
             });
@@ -553,7 +614,7 @@
             if(activeRelationNodeName === ot) return alert('자가 연결 불가');
             if(!relationsDB[activeRelationNodeName]) relationsDB[activeRelationNodeName] = {}; relationsDB[activeRelationNodeName][ot] = type;
             if(!relationsDB[ot]) relationsDB[ot] = {}; relationsDB[ot][activeRelationNodeName] = type;
-            saveData(); const idx = subjectsDB.findIndex(s=>s.name===activeRelationNodeName); highlightNode(activeRelationNodeName, idx);
+            saveCloudData(); const idx = subjectsDB.findIndex(s=>s.name===activeRelationNodeName); highlightNode(activeRelationNodeName, idx);
         }
 
         function renderLogs() {
@@ -578,7 +639,7 @@
             };
             if(editIdx !== "") { experimentLogsDB[parseInt(editIdx)] = log; document.getElementById('ex-edit-index').value = ""; }
             else { experimentLogsDB.push(log); }
-            saveData(); renderLogs();
+            saveCloudData(); renderLogs();
             document.getElementById('ex-proj-name').value = ''; document.getElementById('ex-form-headline').innerText = "로그 기록";
         }
 
@@ -604,7 +665,7 @@
             const sI = subjectsDB.findIndex(s=>s.name===d.subName); if(sI!==-1) document.getElementById('ex-select-subject').value = sI;
             document.getElementById('ex-form-headline').innerText = "로그 수정"; closeWindow('win-log-detail'); openWindow('win-experiment-log');
         }
-        function triggerDeleteLog() { if(confirm('기록을 파기합니까?')) { experimentLogsDB.splice(activeLogDetailIndex,1); saveData(); closeWindow('win-log-detail'); } }
+        function triggerDeleteLog() { if(confirm('기록을 파기합니까?')) { experimentLogsDB.splice(activeLogDetailIndex,1); saveCloudData(); closeWindow('win-log-detail'); } }
 
         function syncUI() { renderList(); if(document.getElementById('win-relations').style.display==='flex') buildRelations(); renderLogs(); }
 
