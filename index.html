@@ -381,74 +381,73 @@
     </div>
 
     <script>
-        // 🌟 [중요] 1단계에서 발급받은 본인만의 JSONBin 고유 ID를 아래 따옴표 안에 넣어주세요!
-        const BIN_ID = "6a258515f5f4af5e29c69c42"; 
-        const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+    // 🌟 [중요] 1단계에서 발급받은 본인만의 JSONBin 고유 ID와 API KEY를 입력하세요!
+    const BIN_ID = "6a258515f5f4af5e29c69c42"; 
+    const API_KEY = "$2a$10$YOUR_ACTUAL_MASTER_KEY_HERE"; // 여기에 JSONBin에서 발급받은 X-Master-Key를 넣으세요.
+    const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-        let subjectsDB = [];
-        let relationsDB = {};
-        let experimentLogsDB = [];
-        let nodePositions = {};
+    // ... 중간 코드 생략 ...
+
+    // 클라우드 서버에서 통합 데이터 로드하기
+    async function loadCloudData() {
+        try {
+            document.getElementById('sync-status').innerText = "⏳ 클라우드 동기화 중...";
+            const res = await fetch(`${API_URL}/latest`, {
+                headers: { 
+                    "X-Bin-Meta": "false",
+                    "X-Master-Key": API_KEY // 🔑 인증 키 추가
+                }
+            });
+            if (!res.ok) throw new Error();
+            const cloudData = await res.json();
         
-        let currentAuthority = "viewer";
-        let activeRelationNodeName = null;
-        let activeProfileDetailIndex = null;
-        let activeLogDetailIndex = null; 
-
-        // 클라우드 서버에서 통합 데이터 로드하기
-        async function loadCloudData() {
-            try {
-                document.getElementById('sync-status').innerText = "⏳ 클라우드 동기화 중...";
-                const res = await fetch(`${API_URL}/latest`, {
-                    headers: { "X-Bin-Meta": "false" }
-                });
-                if (!res.ok) throw new Error();
-                const cloudData = await res.json();
-                
-                subjectsDB = cloudData.subjects || [];
-                relationsDB = cloudData.relations || {};
-                experimentLogsDB = cloudData.logs || [];
-                nodePositions = cloudData.nodePositions || {};
-                
-                document.getElementById('sync-status').innerText = "🟢 실시간 동기화 완료";
-                syncUI();
-            } catch (err) {
-                document.getElementById('sync-status').innerText = "🔴 클라우드 로드 실패 (초기화 필요)";
-                subjectsDB = JSON.parse(localStorage.getItem('bk_subjects')) || [];
-                relationsDB = JSON.parse(localStorage.getItem('bk_relations')) || {};
-                experimentLogsDB = JSON.parse(localStorage.getItem('bk_logs')) || [];
-                syncUI();
-            }
+            subjectsDB = cloudData.subjects || [];
+            relationsDB = cloudData.relations || {};
+            experimentLogsDB = cloudData.logs || [];
+            nodePositions = cloudData.nodePositions || {};
+        
+           document.getElementById('sync-status').innerText = "🟢 실시간 동기화 완료";
+            syncUI();
+        } catch (err) {
+            document.getElementById('sync-status').innerText = "🔴 클라우드 로드 실패 (로컬 데이터 전환)";
+            subjectsDB = JSON.parse(localStorage.getItem('bk_subjects')) || [];
+            relationsDB = JSON.parse(localStorage.getItem('bk_relations')) || {};
+            experimentLogsDB = JSON.parse(localStorage.getItem('bk_logs')) || [];
+            syncUI();
         }
+    }
 
-        // 클라우드 서버에 데이터 업데이트 및 실시간 전송
-        async function saveCloudData() {
-            try {
-                document.getElementById('sync-status').innerText = "⏳ 데이터 서버 전송 중...";
-                const payload = {
-                    subjects: subjectsDB,
-                    relations: relationsDB,
-                    logs: experimentLogsDB,
-                    nodePositions: nodePositions
-                };
-                
-                localStorage.setItem('bk_subjects', JSON.stringify(subjectsDB));
-                localStorage.setItem('bk_relations', JSON.stringify(relationsDB));
-                localStorage.setItem('bk_logs', JSON.stringify(experimentLogsDB));
+    // 클라우드 서버에 데이터 업데이트 및 실시간 전송
+    async function saveCloudData() {
+        try {
+            document.getElementById('sync-status').innerText = "⏳ 데이터 서버 전송 중...";
+            const payload = {
+                subjects: subjectsDB,
+                relations: relationsDB,
+                logs: experimentLogsDB,
+                nodePositions: nodePositions
+            };
+        
+            localStorage.setItem('bk_subjects', JSON.stringify(subjectsDB));
+            localStorage.setItem('bk_relations', JSON.stringify(relationsDB));
+            localStorage.setItem('bk_logs', JSON.stringify(experimentLogsDB));
 
-                const res = await fetch(API_URL, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (!res.ok) throw new Error();
-                document.getElementById('sync-status').innerText = "🟢 클라우드 저장 완료";
-                syncUI();
-            } catch (err) {
-                document.getElementById('sync-status').innerText = "🔴 서버 저장 실패 (로컬 우선 저장)";
-                syncUI();
-            }
+            const res = await fetch(API_URL, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    "X-Master-Key": API_KEY // 🔑 인증 키 추가
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error();
+            document.getElementById('sync-status').innerText = "🟢 클라우드 저장 완료";
+            syncUI();
+        } catch (err) {
+            document.getElementById('sync-status').innerText = "🔴 서버 저장 실패 (로컬 우선 저장)";
+            syncUI();
         }
+    }
 
         // 사원증 연출 효과가 적용된 신규 로그인 프로세스
         function processTerminalSecurityLogin() {
