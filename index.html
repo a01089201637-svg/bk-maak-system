@@ -540,6 +540,10 @@
             const container = document.getElementById('relation-canvas-container');
             document.querySelectorAll('.node-subject').forEach(n => n.remove());
             if(subjectsDB.length === 0) return;
+            // 🌟 [중요] 1단계에서 획득한 나만의 고유 BIN_ID를 아래 따옴표 안에 붙여넣으세요!
+            // 기존 코드: const BIN_ID = "여기에_복사한_ID를_넣으세요";
+            const BIN_ID = "6a258515f5f4af5e29c69c42"; 
+            const API_URL = `https://api.jsonbin.io/v3/b/${6a258515f5f4af5e29c69c42}`;
 
             const cx = container.clientWidth / 2 - 30, cy = container.clientHeight / 2 - 30, r = Math.min(cx, cy) - 50;
             subjectsDB.forEach((s, idx) => {
